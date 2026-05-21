@@ -7,6 +7,7 @@ import {
 } from "@/lib/db";
 import AutoPoller from "@/components/AutoPoller";
 import ActionPanel from "@/components/ActionPanel";
+import MessageForm from "@/components/MessageForm";
 import type { RiskFactor, ConversationMessage, SessionStatus } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -239,18 +240,26 @@ export default async function IssuePage({
 
   const analyzeSession = sessions.find((s) => s.kind === "analyze") ?? null;
   const executeSession = sessions.filter((s) => s.kind === "execute").at(-1) ?? null;
-  const analyzeStatus: SessionStatus = analysis ? "completed" : (analyzeSession?.status as SessionStatus) ?? "running";
-  const hasRunning = sessions.some((s) => {
-    if (s.status !== "running") return false;
-    if (s.kind === "analyze" && analysis) return false;
-    return true;
-  });
   const isApproved = !!analysis?.approved_at;
+  const analyzeStatus: SessionStatus = analysis
+    ? (isApproved ? "completed" : (analyzeSession?.status as SessionStatus ?? "completed"))
+    : (analyzeSession?.status as SessionStatus) ?? "running";
+  const msgs = analysis ? (analysis.user_messages as ConversationMessage[]) : [];
+  const isWaitingForDevin = msgs.length > 0 && msgs[msgs.length - 1].role === "user";
+  const hasRunning = sessions.some((s) => {
+    if (s.status === "running") {
+      if (s.kind === "analyze" && analysis) return false;
+      return true;
+    }
+    if (s.status === "blocked" && s.kind === "analyze" && analysis && !isApproved) {
+      return isWaitingForDevin;
+    }
+    return false;
+  });
 
-  const plan  = analysis ? (analysis.proposed_plan  as string[])              : [];
-  const files = analysis ? (analysis.files_to_change as string[])              : [];
-  const risks = analysis ? (analysis.risk_factors    as RiskFactor[])          : [];
-  const msgs  = analysis ? (analysis.user_messages   as ConversationMessage[]) : [];
+  const plan  = analysis ? (analysis.proposed_plan  as string[])     : [];
+  const files = analysis ? (analysis.files_to_change as string[])    : [];
+  const risks = analysis ? (analysis.risk_factors    as RiskFactor[]) : [];
 
   return (
     <div style={{ maxWidth: 720, margin: "0 auto" }}>
@@ -504,6 +513,59 @@ export default async function IssuePage({
                 </div>
               </>
             )}
+
+            {!isApproved && (
+              <>
+                <InternalDivider />
+                {msgs.length > 0 && (
+                  <>
+                    <SubLabel>Chat with Devin</SubLabel>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 16 }}>
+                      {msgs.map((msg, i) => (
+                        <div key={i} style={{ display: "flex", gap: 10 }}>
+                          <span
+                            style={{
+                              fontFamily: "var(--font-jetbrains-mono), monospace",
+                              fontSize: 11,
+                              color: msg.role === "user" ? "var(--accent)" : "var(--text-tertiary)",
+                              flexShrink: 0,
+                              marginTop: 1,
+                              minWidth: 40,
+                            }}
+                          >
+                            {msg.role === "user" ? "you" : "devin"}
+                          </span>
+                          <div style={{ flex: 1 }}>
+                            <p style={{ fontSize: 14, color: "var(--text)", lineHeight: 1.6, margin: 0 }}>
+                              {msg.content}
+                            </p>
+                            {msg.timestamp && (
+                              <p
+                                style={{
+                                  fontFamily: "var(--font-jetbrains-mono), monospace",
+                                  fontSize: 11,
+                                  color: "var(--text-tertiary)",
+                                  marginTop: 3,
+                                  marginBottom: 0,
+                                }}
+                              >
+                                {formatTs(msg.timestamp)}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+                {!msgs.length && (
+                  <p style={{ fontSize: 13, color: "var(--text-tertiary)", marginBottom: 12, marginTop: 0 }}>
+                    Ask Devin to refine the plan before approving, or proceed to execute as-is.
+                  </p>
+                )}
+                <MessageForm issueNumber={issue.number} isWaiting={isWaitingForDevin} />
+              </>
+            )}
           </CardBody>
         )}
       </Card>
@@ -579,49 +641,6 @@ export default async function IssuePage({
               </p>
             )}
           </div>
-
-          {msgs.length > 0 && (
-            <>
-              <InternalDivider />
-              <SubLabel>Reviewer Notes</SubLabel>
-              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                {msgs.map((msg, i) => (
-                  <div key={i} style={{ display: "flex", gap: 10 }}>
-                    <span
-                      style={{
-                        fontFamily: "var(--font-jetbrains-mono), monospace",
-                        fontSize: 11,
-                        color: msg.role === "user" ? "var(--accent)" : "var(--text-tertiary)",
-                        flexShrink: 0,
-                        marginTop: 1,
-                        minWidth: 36,
-                      }}
-                    >
-                      {msg.role === "user" ? "you" : "devin"}
-                    </span>
-                    <div style={{ flex: 1 }}>
-                      <p style={{ fontSize: 14, color: "var(--text)", lineHeight: 1.6, margin: 0 }}>
-                        {msg.content}
-                      </p>
-                      {msg.timestamp && (
-                        <p
-                          style={{
-                            fontFamily: "var(--font-jetbrains-mono), monospace",
-                            fontSize: 11,
-                            color: "var(--text-tertiary)",
-                            marginTop: 3,
-                            marginBottom: 0,
-                          }}
-                        >
-                          {formatTs(msg.timestamp)}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
 
           {analysis && !isApproved && (
             <>

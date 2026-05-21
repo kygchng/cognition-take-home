@@ -52,7 +52,7 @@ Your task:
 - Assess risks: breaking changes, missing test coverage, scope creep, ambiguous requirements, external dependencies
 - Estimate scope: small (< 1 day), medium (1–3 days), large (> 3 days)
 
-IMPORTANT: Complete this analysis fully and autonomously. Do not pause to ask for clarification or wait for user input. If the issue lacks detail, note it as an ambiguity risk factor with high severity and make reasonable assumptions. Always produce the structured output and end the session.`;
+IMPORTANT: Complete this analysis fully and autonomously. Do not pause to ask for clarification during analysis. If the issue lacks detail, note it as an ambiguity risk factor with high severity and make reasonable assumptions. Once you have produced the structured output, wait — a human reviewer may send follow-up questions or additional constraints before approving execution.`;
 }
 
 export async function triggerAnalyzeSession(issue: DbIssue): Promise<string> {

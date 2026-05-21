@@ -19,6 +19,13 @@ type CreateSessionParams = {
   idempotent?: boolean;
 };
 
+export type DevinMessage = {
+  type: "initial_user_message" | "user_message" | "devin_message";
+  event_id: string;
+  message: string;
+  timestamp: string;
+};
+
 type DevinSession = {
   session_id: string;
   status: string;
@@ -28,6 +35,7 @@ type DevinSession = {
   pull_request?: { url: string };
   structured_output?: unknown;
   acu_cost?: number;
+  messages?: DevinMessage[];
   created_at: string;
   updated_at: string;
 };

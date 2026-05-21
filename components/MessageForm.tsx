@@ -3,14 +3,20 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-export default function MessageForm({ issueNumber }: { issueNumber: number }) {
+export default function MessageForm({
+  issueNumber,
+  isWaiting = false,
+}: {
+  issueNumber: number;
+  isWaiting?: boolean;
+}) {
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!message.trim()) return;
+    if (!message.trim() || isWaiting) return;
     setLoading(true);
     try {
       await fetch(`/api/issues/${issueNumber}/message`, {
@@ -25,22 +31,24 @@ export default function MessageForm({ issueNumber }: { issueNumber: number }) {
     }
   }
 
+  const disabled = loading || isWaiting;
+
   return (
     <form onSubmit={handleSubmit} className="msg-form">
       <input
         type="text"
         value={message}
         onChange={(e) => setMessage(e.target.value)}
-        placeholder="Add context or constraints for Devin…"
-        disabled={loading}
+        placeholder={isWaiting ? "Devin is thinking…" : "Ask Devin a question or add constraints…"}
+        disabled={disabled}
         className="msg-input"
       />
       <button
         type="submit"
-        disabled={loading || !message.trim()}
+        disabled={disabled || !message.trim()}
         className="msg-btn"
       >
-        Send
+        {loading ? "…" : "Send"}
       </button>
 
       <style jsx>{`
@@ -68,6 +76,7 @@ export default function MessageForm({ issueNumber }: { issueNumber: number }) {
         }
         .msg-input:disabled {
           opacity: 0.5;
+          cursor: not-allowed;
         }
         .msg-btn {
           font-family: var(--font-dm-sans), system-ui, sans-serif;

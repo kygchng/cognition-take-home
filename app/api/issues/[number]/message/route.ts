@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { getAnalysisByIssue, appendConversationMessage } from "@/lib/db";
+import { getDevinClient } from "@/lib/devin";
 
 export const dynamic = "force-dynamic";
 
@@ -34,5 +36,14 @@ export async function POST(
   }
 
   await appendConversationMessage(analysis.session_id, message, "user");
+
+  try {
+    const client = getDevinClient();
+    await client.sendMessage(analysis.session_id, message);
+  } catch (err) {
+    console.error("[message] Failed to forward message to Devin:", err);
+  }
+
+  revalidatePath(`/issues/${issueNumber}`);
   return NextResponse.json({ ok: true });
 }

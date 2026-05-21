@@ -1,4 +1,4 @@
-import { getDevinClient } from "./devin";
+import { getDevinClient, type DevinMessage } from "./devin";
 import {
   listSessions,
   listSessionsForIssue,
@@ -7,6 +7,7 @@ import {
   getAnalysisBySessionId,
   approveAnalysis,
   getIssueByNumber,
+  appendConversationMessage,
 } from "./db";
 import { triggerExecuteSession } from "./execute";
 import type { AnalysisResult, ConversationMessage, RiskFactor, SessionStatus } from "./types";
@@ -24,7 +25,7 @@ export function shouldAutoApprove(result: AnalysisResult): boolean {
   if (result.estimatedScope !== "small") return false;
   if (result.filesToChange.length > 5) return false;
   if (result.riskFactors.some((r) => r.severity === "high")) return false;
-  if (result.riskFactors.some((r) => r.category === "breaking-change")) return false;
+  if (result.riskFactors.some((r) => r.category === "breaking-change" && r.severity !== "low")) return false;
   return true;
 }
 
@@ -55,7 +56,9 @@ export async function pollRunningSessions(): Promise<{
 }> {
   const client = getDevinClient();
   const sessions = await listSessions();
-  const running = sessions.filter((s) => s.status === "running");
+  const running = sessions.filter(
+    (s) => s.status === "running" || (s.status === "blocked" && s.kind === "analyze")
+  );
 
   let updated = 0;
   const errors: string[] = [];
@@ -68,6 +71,33 @@ export async function pollRunningSessions(): Promise<{
       );
 
       if (session.kind === "analyze") {
+        if (session.status === "blocked") {
+          const existing = await getAnalysisBySessionId(session.devin_session_id);
+          if (!existing) continue;
+
+          const storedMsgs = existing.user_messages as ConversationMessage[];
+          const lastUserMsg = [...storedMsgs].reverse().find((m) => m.role === "user");
+          if (!lastUserMsg) continue;
+
+          const devinMsgs: DevinMessage[] = devinSession.messages ?? [];
+          const lastUserTs = new Date(lastUserMsg.timestamp).getTime();
+          const newDevinMsgs = devinMsgs.filter(
+            (m) => m.type === "devin_message" && new Date(m.timestamp).getTime() > lastUserTs
+          );
+          const storedAssistantAfter = storedMsgs.filter(
+            (m) => m.role === "assistant" && new Date(m.timestamp).getTime() > lastUserTs
+          );
+
+          if (newDevinMsgs.length > storedAssistantAfter.length) {
+            const toAdd = newDevinMsgs.slice(storedAssistantAfter.length);
+            for (const msg of toAdd) {
+              await appendConversationMessage(session.devin_session_id, msg.message, "assistant");
+            }
+            updated++;
+          }
+          continue;
+        }
+
         if (devinSession.structured_output) {
           const existing = await getAnalysisBySessionId(session.devin_session_id);
 
@@ -85,8 +115,9 @@ export async function pollRunningSessions(): Promise<{
                 raw_output: JSON.stringify(devinSession.structured_output),
               });
               const autoApproved = shouldAutoApprove(result);
+              const nextStatus: SessionStatus = autoApproved ? "completed" : "blocked";
               await updateSession(session.devin_session_id, {
-                status: "completed",
+                status: nextStatus,
                 auto_approved: autoApproved,
                 ...(typeof devinSession.acu_cost === "number" && {
                   acu_cost: devinSession.acu_cost,
@@ -111,8 +142,9 @@ export async function pollRunningSessions(): Promise<{
               continue;
             }
           } else {
+            const nextStatus: SessionStatus = existing.approved_at ? "completed" : "blocked";
             await updateSession(session.devin_session_id, {
-              status: "completed",
+              status: nextStatus,
               ...(typeof devinSession.acu_cost === "number" && {
                 acu_cost: devinSession.acu_cost,
               }),
