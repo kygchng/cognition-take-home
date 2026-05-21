@@ -36,15 +36,13 @@ export type SessionStatus =
   | "blocked"
   | "stopped";
 
-// ── Row types (match Supabase table columns) ──────────────────────────────────
-
 export type DbIssue = {
   number: number;
   title: string;
   body: string | null;
   url: string;
   classified_as: IssueClassification | null;
-  created_at: string;
+  created_at: string | null;
 };
 
 export type DbSession = {
@@ -56,10 +54,10 @@ export type DbSession = {
   pr_url: string | null;
   acu_cost: number | null;
   devin_url: string;
-  auto_approved: boolean;
+  auto_approved: boolean | null;
   error_message: string | null;
-  created_at: string;
-  updated_at: string;
+  created_at: string | null;
+  updated_at: string | null;
 };
 
 export type DbAnalysis = {
@@ -73,5 +71,5 @@ export type DbAnalysis = {
   raw_output: string;
   user_messages: string[];
   approved_at: string | null;
-  created_at: string;
+  created_at: string | null;
 };
