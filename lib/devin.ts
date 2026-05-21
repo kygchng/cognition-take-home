@@ -22,6 +22,7 @@ type CreateSessionParams = {
 type DevinSession = {
   session_id: string;
   status: string;
+  status_enum: string;
   url: string;
   title: string;
   pull_request?: { url: string };

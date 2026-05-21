@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifySignature } from "@/lib/webhook";
-import { upsertIssue } from "@/lib/db";
+import { upsertIssue, getIssueByNumber } from "@/lib/db";
+import { triggerAnalyzeSession } from "@/lib/analyze";
 import type { IssueClassification } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -43,9 +44,25 @@ export async function POST(req: NextRequest) {
     classified_as: classifiedAs,
   });
 
+  const dbIssue = await getIssueByNumber(issue.number);
+  if (!dbIssue) {
+    return NextResponse.json(
+      { error: "Failed to retrieve issue after upsert" },
+      { status: 500 }
+    );
+  }
+
+  let analyzeSessionId: string | null = null;
+  try {
+    analyzeSessionId = await triggerAnalyzeSession(dbIssue);
+  } catch (err) {
+    console.error("Failed to trigger analyze session:", err);
+  }
+
   return NextResponse.json({
     received: true,
     issueNumber: issue.number,
     classifiedAs,
+    analyzeSessionId,
   });
 }
