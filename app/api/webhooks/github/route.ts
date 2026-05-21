@@ -25,11 +25,17 @@ export async function POST(req: NextRequest) {
   const event = req.headers.get("x-github-event");
   const payload = JSON.parse(rawBody);
 
-  if (
-    event !== "issues" ||
-    payload.action !== "opened" ||
-    !payload.issue?.labels?.some((l: { name: string }) => l.name === "auto-remediate")
-  ) {
+  if (event !== "issues") {
+    return NextResponse.json({ skipped: true });
+  }
+
+  const isLabeledTrigger =
+    payload.action === "labeled" && payload.label?.name === "auto-remediate";
+  const isOpenedWithLabel =
+    payload.action === "opened" &&
+    payload.issue?.labels?.some((l: { name: string }) => l.name === "auto-remediate");
+
+  if (!isLabeledTrigger && !isOpenedWithLabel) {
     return NextResponse.json({ skipped: true });
   }
 
