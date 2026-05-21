@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { DM_Sans } from "next/font/google";
 import { JetBrains_Mono } from "next/font/google";
 import Link from "next/link";
 import "./globals.css";
 
-const inter = Inter({
+const dmSans = DM_Sans({
   subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-  variable: "--font-inter",
+  weight: ["400", "500", "600"],
+  variable: "--font-dm-sans",
 });
 
 const jetbrainsMono = JetBrains_Mono({
@@ -17,7 +17,7 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Devin Auto-Remediate",
+  title: "Auto-Remediate",
   description: "Event-driven Devin automation for Apache Superset",
 };
 
@@ -27,33 +27,18 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable}`}>
+    <html lang="en" className={`${dmSans.variable} ${jetbrainsMono.variable}`}>
       <body>
-        <header
-          style={{ borderBottom: "1px solid var(--border)" }}
-          className="h-12 flex items-center px-12"
-        >
-          <nav className="flex items-center gap-8 max-w-page mx-auto w-full">
-            <span className="font-semibold text-sm tracking-tight">
-              Devin Auto-Remediate
-            </span>
-            <div className="flex items-center gap-6 ml-8">
-              <Link
-                href="/"
-                className="text-sm text-text-secondary hover:text-text transition-colors duration-100"
-              >
-                Dashboard
-              </Link>
-              <Link
-                href="/runs"
-                className="text-sm text-text-secondary hover:text-text transition-colors duration-100"
-              >
-                Runs
-              </Link>
-            </div>
-          </nav>
+        <header className="nav-bar">
+          <div className="max-w-page mx-auto px-8 h-full flex items-center justify-between">
+            <Link href="/" className="flex items-center gap-2.5">
+              <span className="text-sm font-semibold tracking-tight">Auto-Remediate</span>
+              <span className="text-text-tertiary">/</span>
+              <span className="font-mono text-xs text-text-secondary">kygchng/superset</span>
+            </Link>
+          </div>
         </header>
-        <main className="max-w-page mx-auto px-12 py-8">{children}</main>
+        <main className="max-w-page mx-auto px-8 py-10">{children}</main>
       </body>
     </html>
   );

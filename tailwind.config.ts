@@ -9,7 +9,7 @@ const config: Config = {
   theme: {
     extend: {
       fontFamily: {
-        sans: ["var(--font-inter)"],
+        sans: ["var(--font-dm-sans)"],
         mono: ["var(--font-jetbrains-mono)"],
       },
       colors: {

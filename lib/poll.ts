@@ -1,6 +1,7 @@
 import { getDevinClient } from "./devin";
 import {
   listSessions,
+  listSessionsForIssue,
   updateSession,
   createAnalysis,
   getAnalysisBySessionId,
@@ -63,43 +64,72 @@ export async function pollRunningSessions(): Promise<{
     try {
       const devinSession = await client.getSession(session.devin_session_id);
       console.log(
-        `[poll] session=${session.devin_session_id} status=${devinSession.status} status_enum=${devinSession.status_enum} has_output=${!!devinSession.structured_output}`
+        `[poll] session=${session.devin_session_id} kind=${session.kind} status=${devinSession.status} status_enum=${devinSession.status_enum} has_output=${!!devinSession.structured_output} has_pr=${!!devinSession.pull_request?.url}`
       );
 
-      if (session.kind === "analyze" && devinSession.structured_output) {
-        const existing = await getAnalysisBySessionId(session.devin_session_id);
-        if (!existing) {
-          const result = parseStructuredOutput(devinSession.structured_output);
-          if (result) {
-            await createAnalysis({
-              session_id: session.devin_session_id,
-              issue_number: session.issue_number,
-              summary: result.summary,
-              proposed_plan: result.plan,
-              files_to_change: result.filesToChange,
-              risk_factors: result.riskFactors,
-              estimated_scope: result.estimatedScope,
-              raw_output: JSON.stringify(devinSession.structured_output),
-            });
-            const autoApproved = shouldAutoApprove(result);
+      if (session.kind === "analyze") {
+        if (devinSession.structured_output) {
+          const existing = await getAnalysisBySessionId(session.devin_session_id);
+
+          if (!existing) {
+            const result = parseStructuredOutput(devinSession.structured_output);
+            if (result) {
+              await createAnalysis({
+                session_id: session.devin_session_id,
+                issue_number: session.issue_number,
+                summary: result.summary,
+                proposed_plan: result.plan,
+                files_to_change: result.filesToChange,
+                risk_factors: result.riskFactors,
+                estimated_scope: result.estimatedScope,
+                raw_output: JSON.stringify(devinSession.structured_output),
+              });
+              const autoApproved = shouldAutoApprove(result);
+              await updateSession(session.devin_session_id, {
+                status: "completed",
+                auto_approved: autoApproved,
+                ...(typeof devinSession.acu_cost === "number" && {
+                  acu_cost: devinSession.acu_cost,
+                }),
+              });
+              if (autoApproved) {
+                const issue = await getIssueByNumber(session.issue_number);
+                const analysis = await getAnalysisBySessionId(session.devin_session_id);
+                if (issue && analysis) {
+                  const executeSessionId = await triggerExecuteSession(
+                    session.devin_session_id,
+                    issue,
+                    analysis,
+                    analysis.user_messages as ConversationMessage[]
+                  );
+                  if (executeSessionId) {
+                    await approveAnalysis(session.devin_session_id);
+                  }
+                }
+              }
+              updated++;
+              continue;
+            }
+          } else {
             await updateSession(session.devin_session_id, {
               status: "completed",
-              auto_approved: autoApproved,
               ...(typeof devinSession.acu_cost === "number" && {
                 acu_cost: devinSession.acu_cost,
               }),
             });
-            if (autoApproved) {
-              const issue = await getIssueByNumber(session.issue_number);
-              const analysis = await getAnalysisBySessionId(session.devin_session_id);
-              if (issue && analysis) {
-                await approveAnalysis(session.devin_session_id);
-                await triggerExecuteSession(
-                  session.devin_session_id,
-                  issue,
-                  analysis,
-                  analysis.user_messages as ConversationMessage[]
-                );
+            if (existing.approved_at) {
+              const issueSessions = await listSessionsForIssue(session.issue_number);
+              const hasExecute = issueSessions.some((s) => s.kind === "execute");
+              if (!hasExecute) {
+                const issue = await getIssueByNumber(session.issue_number);
+                if (issue) {
+                  await triggerExecuteSession(
+                    session.devin_session_id,
+                    issue,
+                    existing,
+                    existing.user_messages as ConversationMessage[]
+                  );
+                }
               }
             }
             updated++;
@@ -108,15 +138,29 @@ export async function pollRunningSessions(): Promise<{
         }
       }
 
-      if (session.kind === "execute" && devinSession.pull_request?.url) {
-        await updateSession(session.devin_session_id, {
-          status: "completed",
-          pr_url: devinSession.pull_request.url,
-          ...(typeof devinSession.acu_cost === "number" && {
-            acu_cost: devinSession.acu_cost,
-          }),
-        });
-        updated++;
+      if (session.kind === "execute") {
+        if (devinSession.pull_request?.url) {
+          await updateSession(session.devin_session_id, {
+            status: "completed",
+            pr_url: devinSession.pull_request.url,
+            ...(typeof devinSession.acu_cost === "number" && {
+              acu_cost: devinSession.acu_cost,
+            }),
+          });
+          updated++;
+          continue;
+        }
+        const trueStatus: SessionStatus =
+          DEVIN_STATUS_MAP[devinSession.status_enum ?? devinSession.status] ?? "running";
+        if (trueStatus !== session.status) {
+          await updateSession(session.devin_session_id, {
+            status: trueStatus,
+            ...(typeof devinSession.acu_cost === "number" && {
+              acu_cost: devinSession.acu_cost,
+            }),
+          });
+          updated++;
+        }
         continue;
       }
 

@@ -121,6 +121,15 @@ export async function listSessionsForIssue(
   return (data ?? []) as DbSession[];
 }
 
+export async function listAnalyses(): Promise<DbAnalysis[]> {
+  const { data, error } = await supabase
+    .from("analyses")
+    .select("*")
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as DbAnalysis[];
+}
+
 export async function createAnalysis(payload: {
   session_id: string;
   issue_number: number;

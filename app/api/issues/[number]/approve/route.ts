@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import {
   getIssueByNumber,
   getAnalysisByIssue,
@@ -34,10 +35,7 @@ export async function POST(
     return NextResponse.json({ error: "Issue not found" }, { status: 404 });
   }
   if (!analysis) {
-    return NextResponse.json(
-      { error: "No analysis found for this issue" },
-      { status: 404 }
-    );
+    return NextResponse.json({ error: "No analysis found for this issue" }, { status: 404 });
   }
   if (analysis.approved_at) {
     return NextResponse.json({ error: "Already approved" }, { status: 409 });
@@ -48,17 +46,12 @@ export async function POST(
     (s) => s.kind === "execute" && s.status === "running"
   );
   if (alreadyExecuting) {
-    return NextResponse.json(
-      { error: "Execute session already running" },
-      { status: 409 }
-    );
+    return NextResponse.json({ error: "Execute session already running" }, { status: 409 });
   }
 
   if (userMessage) {
     await appendConversationMessage(analysis.session_id, userMessage, "user");
   }
-
-  await approveAnalysis(analysis.session_id);
 
   const messages = userMessage
     ? [...analysis.user_messages, { role: "user" as const, content: userMessage, timestamp: new Date().toISOString() }]
@@ -70,6 +63,11 @@ export async function POST(
     analysis,
     messages
   );
+
+  await approveAnalysis(analysis.session_id);
+
+  revalidatePath(`/issues/${issueNumber}`);
+  revalidatePath("/");
 
   return NextResponse.json({ executeSessionId });
 }
