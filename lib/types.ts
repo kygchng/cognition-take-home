@@ -1,3 +1,9 @@
+export type ConversationMessage = {
+  role: "user" | "assistant";
+  content: string;
+  timestamp: string;
+};
+
 export type RiskSeverity = "low" | "medium" | "high";
 
 export type RiskCategory =
@@ -69,7 +75,7 @@ export type DbAnalysis = {
   risk_factors: RiskFactor[];
   estimated_scope: "small" | "medium" | "large";
   raw_output: string;
-  user_messages: string[];
+  user_messages: ConversationMessage[];
   approved_at: string | null;
   created_at: string | null;
 };

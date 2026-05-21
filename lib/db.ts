@@ -8,6 +8,7 @@ import type {
   SessionKind,
   SessionStatus,
   RiskFactor,
+  ConversationMessage,
 } from "./types";
 
 const supabaseUrl = process.env.SUPABASE_URL;
@@ -170,9 +171,10 @@ export async function approveAnalysis(sessionId: string): Promise<void> {
   if (error) throw error;
 }
 
-export async function appendUserMessage(
+export async function appendConversationMessage(
   sessionId: string,
-  message: string
+  content: string,
+  role: ConversationMessage["role"] = "user"
 ): Promise<void> {
   const { data, error: fetchError } = await supabase
     .from("analyses")
@@ -180,7 +182,12 @@ export async function appendUserMessage(
     .eq("session_id", sessionId)
     .single();
   if (fetchError) throw fetchError;
-  const current = (data?.user_messages as string[]) ?? [];
+  const current = (data?.user_messages as ConversationMessage[]) ?? [];
+  const message: ConversationMessage = {
+    role,
+    content,
+    timestamp: new Date().toISOString(),
+  };
   const { error } = await supabase
     .from("analyses")
     .update({ user_messages: [...current, message] })

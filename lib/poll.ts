@@ -4,8 +4,11 @@ import {
   updateSession,
   createAnalysis,
   getAnalysisBySessionId,
+  approveAnalysis,
+  getIssueByNumber,
 } from "./db";
-import type { AnalysisResult, RiskFactor, SessionStatus } from "./types";
+import { triggerExecuteSession } from "./execute";
+import type { AnalysisResult, ConversationMessage, RiskFactor, SessionStatus } from "./types";
 
 const DEVIN_STATUS_MAP: Record<string, SessionStatus> = {
   running: "running",
@@ -17,8 +20,11 @@ const DEVIN_STATUS_MAP: Record<string, SessionStatus> = {
 };
 
 export function shouldAutoApprove(result: AnalysisResult): boolean {
-  const hasHighRisk = result.riskFactors.some((r) => r.severity === "high");
-  return result.estimatedScope === "small" && !hasHighRisk;
+  if (result.estimatedScope !== "small") return false;
+  if (result.filesToChange.length > 5) return false;
+  if (result.riskFactors.some((r) => r.severity === "high")) return false;
+  if (result.riskFactors.some((r) => r.category === "breaking-change")) return false;
+  return true;
 }
 
 function parseStructuredOutput(raw: unknown): AnalysisResult | null {
@@ -75,17 +81,43 @@ export async function pollRunningSessions(): Promise<{
               estimated_scope: result.estimatedScope,
               raw_output: JSON.stringify(devinSession.structured_output),
             });
+            const autoApproved = shouldAutoApprove(result);
             await updateSession(session.devin_session_id, {
               status: "completed",
-              auto_approved: shouldAutoApprove(result),
+              auto_approved: autoApproved,
               ...(typeof devinSession.acu_cost === "number" && {
                 acu_cost: devinSession.acu_cost,
               }),
             });
+            if (autoApproved) {
+              const issue = await getIssueByNumber(session.issue_number);
+              const analysis = await getAnalysisBySessionId(session.devin_session_id);
+              if (issue && analysis) {
+                await approveAnalysis(session.devin_session_id);
+                await triggerExecuteSession(
+                  session.devin_session_id,
+                  issue,
+                  analysis,
+                  analysis.user_messages as ConversationMessage[]
+                );
+              }
+            }
             updated++;
             continue;
           }
         }
+      }
+
+      if (session.kind === "execute" && devinSession.pull_request?.url) {
+        await updateSession(session.devin_session_id, {
+          status: "completed",
+          pr_url: devinSession.pull_request.url,
+          ...(typeof devinSession.acu_cost === "number" && {
+            acu_cost: devinSession.acu_cost,
+          }),
+        });
+        updated++;
+        continue;
       }
 
       const newStatus: SessionStatus =
